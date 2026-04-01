@@ -4,6 +4,27 @@
 
 pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
 
+## CCOS — Credit Card Operating System
+
+A personal finance web app that helps users make smart credit card decisions daily.
+
+### Features
+- **Dashboard**: Best card recommendation (scored by cycle position, utilization, due date), warnings, spending stats
+- **Cards**: Manage credit cards with limit, utilization, safe spend remaining, statement/due dates
+- **Transactions**: Log expenses, payments, income. Filter by type. All linked to cards.
+- **Add Entry**: Quick form to add any transaction type
+
+### Core Business Rules
+- Safe spend = 40% of limit
+- Best card scoring: +50 if within 5 days of statement, +20 if util < 30%, -40 if due in 5 days, -100 if util > 40%
+- Warnings trigger at: utilization > 40%, due within 7 days, thin cash buffer
+
+### Architecture
+- Frontend: `artifacts/ccos/` — React + Vite + wouter + shadcn/ui
+- Backend: `artifacts/api-server/` — Express 5 + PostgreSQL + Drizzle ORM
+- Calculation logic: `artifacts/api-server/src/lib/calculations.ts`
+- DB schema: `lib/db/src/schema/cards.ts`, `lib/db/src/schema/transactions.ts`
+
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces

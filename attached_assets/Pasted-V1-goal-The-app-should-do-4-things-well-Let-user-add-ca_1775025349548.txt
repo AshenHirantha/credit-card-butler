@@ -1,0 +1,703 @@
+V1 goal
+
+The app should do 4 things well:
+
+Let user add cards
+Let user log expenses, payments, and incomes
+Tell user which card is best to use today
+Warn about due dates, overuse, and cash shortfalls
+Step 1: Define the v1 screens
+
+Build only these 4 pages:
+
+1. Dashboard
+
+Shows:
+
+Best card today
+Upcoming payments
+Warnings
+Total safe spend remaining
+2. Cards
+
+Shows:
+
+All cards
+Limit
+Statement date
+Due date
+Current used amount
+Utilization
+3. Transactions
+
+Shows:
+
+Expenses
+Payments
+Incomes
+4. Add Entry
+
+Form to add:
+
+Expense
+Payment
+Income
+
+That is enough for v1.
+
+Step 2: Define the data model
+
+Keep it very small.
+
+Card
+type Card = {
+  id: string;
+  name: string;
+  bank?: string;
+  limit: number;
+  statementDay: number; // 1-28 or 1-31
+  dueDay: number;       // 1-28 or 1-31
+  color?: string;
+};
+Transaction
+type TransactionType = "expense" | "payment" | "income";
+
+type Transaction = {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  date: string; // ISO date
+  cardId?: string; // required for expense/payment, empty for income
+  note?: string;
+};
+Derived values
+
+You do not store these permanently at first:
+
+current card balance
+utilization
+upcoming payment amount
+safe spend
+best card today
+
+Compute them from cards + transactions.
+
+That keeps the app simple.
+
+Step 3: Define the core rules
+
+These are the brain of the app.
+
+Rule A: current used amount on a card
+used = total(expenses on card) - total(payments on card)
+Rule B: utilization
+utilization = used / limit
+Rule C: safe spend remaining
+
+Use your 40% rule:
+
+safeSpendRemaining = max(0, limit * 0.4 - used)
+Rule D: best card today
+
+A card is good today when:
+
+today is close to the start of its cycle
+it is under safe utilization
+it is not near overdue stress
+
+Simple score:
+
+score =
+  cycleWindowScore +
+  utilizationScore +
+  dueRiskPenalty
+
+A practical version:
+
++50 if today is within first 5 days after statement day
++20 if utilization < 30%
+-40 if due date is within 5 days and used > 0
+-100 if utilization > 40%
+
+Highest score wins.
+
+Step 4: Create the project
+
+Run:
+
+npx create-next-app@latest ccos-v1 --typescript --tailwind --eslint --app
+cd ccos-v1
+npm run dev
+Step 5: Set up the folder structure
+
+Use this:
+
+src/
+  app/
+    page.tsx
+    cards/page.tsx
+    transactions/page.tsx
+    add/page.tsx
+    layout.tsx
+  components/
+    CardSummary.tsx
+    BestCardToday.tsx
+    WarningList.tsx
+    TransactionTable.tsx
+    AddEntryForm.tsx
+  lib/
+    storage.ts
+    calculations.ts
+    dates.ts
+    types.ts
+  hooks/
+    useAppData.ts
+Step 6: Add the types
+
+Create src/lib/types.ts
+
+export type Card = {
+  id: string;
+  name: string;
+  bank?: string;
+  limit: number;
+  statementDay: number;
+  dueDay: number;
+  color?: string;
+};
+
+export type TransactionType = "expense" | "payment" | "income";
+
+export type Transaction = {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  date: string;
+  cardId?: string;
+  note?: string;
+};
+Step 7: Add local storage helpers
+
+Create src/lib/storage.ts
+
+import { Card, Transaction } from "./types";
+
+const CARDS_KEY = "ccos_cards";
+const TXNS_KEY = "ccos_transactions";
+
+export function loadCards(): Card[] {
+  if (typeof window === "undefined") return [];
+  const raw = localStorage.getItem(CARDS_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export function saveCards(cards: Card[]) {
+  localStorage.setItem(CARDS_KEY, JSON.stringify(cards));
+}
+
+export function loadTransactions(): Transaction[] {
+  if (typeof window === "undefined") return [];
+  const raw = localStorage.getItem(TXNS_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+export function saveTransactions(txns: Transaction[]) {
+  localStorage.setItem(TXNS_KEY, JSON.stringify(txns));
+}
+Step 8: Add a single app state hook
+
+Create src/hooks/useAppData.ts
+
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Card, Transaction } from "@/lib/types";
+import {
+  loadCards,
+  loadTransactions,
+  saveCards,
+  saveTransactions,
+} from "@/lib/storage";
+
+export function useAppData() {
+  const [cards, setCards] = useState<Card[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setCards(loadCards());
+    setTransactions(loadTransactions());
+    setReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    saveCards(cards);
+  }, [cards, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    saveTransactions(transactions);
+  }, [transactions, ready]);
+
+  const addCard = (card: Card) => setCards((prev) => [...prev, card]);
+  const addTransaction = (txn: Transaction) =>
+    setTransactions((prev) => [txn, ...prev]);
+
+  return {
+    ready,
+    cards,
+    transactions,
+    addCard,
+    addTransaction,
+    setCards,
+    setTransactions,
+  };
+}
+Step 9: Add calculation helpers
+
+Create src/lib/calculations.ts
+
+import { Card, Transaction } from "./types";
+
+export function getCardUsed(cardId: string, transactions: Transaction[]) {
+  let expenses = 0;
+  let payments = 0;
+
+  for (const t of transactions) {
+    if (t.cardId !== cardId) continue;
+    if (t.type === "expense") expenses += t.amount;
+    if (t.type === "payment") payments += t.amount;
+  }
+
+  return Math.max(0, expenses - payments);
+}
+
+export function getUtilization(card: Card, transactions: Transaction[]) {
+  const used = getCardUsed(card.id, transactions);
+  return card.limit > 0 ? used / card.limit : 0;
+}
+
+export function getSafeSpendRemaining(card: Card, transactions: Transaction[]) {
+  const used = getCardUsed(card.id, transactions);
+  return Math.max(0, card.limit * 0.4 - used);
+}
+
+export function getDaysUntilDue(dueDay: number) {
+  const today = new Date();
+  const due = new Date(today.getFullYear(), today.getMonth(), dueDay);
+
+  if (due < today) {
+    due.setMonth(due.getMonth() + 1);
+  }
+
+  const diff = due.getTime() - today.getTime();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+export function getCycleDay(statementDay: number) {
+  const today = new Date();
+  let statement = new Date(today.getFullYear(), today.getMonth(), statementDay);
+
+  if (today.getDate() < statementDay) {
+    statement.setMonth(statement.getMonth() - 1);
+  }
+
+  const diff = today.getTime() - statement.getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24)) + 1;
+}
+
+export function getCardScore(card: Card, transactions: Transaction[]) {
+  const utilization = getUtilization(card, transactions);
+  const dueDays = getDaysUntilDue(card.dueDay);
+  const cycleDay = getCycleDay(card.statementDay);
+  const used = getCardUsed(card.id, transactions);
+
+  let score = 0;
+
+  if (cycleDay >= 1 && cycleDay <= 5) score += 50;
+  if (utilization < 0.3) score += 20;
+  if (utilization > 0.4) score -= 100;
+  if (dueDays <= 5 && used > 0) score -= 40;
+
+  return score;
+}
+
+export function getBestCard(cards: Card[], transactions: Transaction[]) {
+  if (!cards.length) return null;
+
+  const ranked = [...cards]
+    .map((card) => ({
+      card,
+      score: getCardScore(card, transactions),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  return ranked[0]?.card ?? null;
+}
+
+export function getWarnings(cards: Card[], transactions: Transaction[]) {
+  const warnings: string[] = [];
+
+  for (const card of cards) {
+    const util = getUtilization(card, transactions);
+    const used = getCardUsed(card.id, transactions);
+    const dueDays = getDaysUntilDue(card.dueDay);
+
+    if (util > 0.4) {
+      warnings.push(`${card.name}: utilization above safe threshold`);
+    }
+
+    if (dueDays <= 3 && used > 0) {
+      warnings.push(`${card.name}: payment due in ${dueDays} day(s)`);
+    }
+  }
+
+  const income = transactions
+    .filter((t) => t.type === "income")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const payments = transactions
+    .filter((t) => t.type === "payment")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const expenses = transactions
+    .filter((t) => t.type === "expense" && !t.cardId)
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const cashBalance = income - payments - expenses;
+
+  const totalCardUsed = cards.reduce(
+    (sum, c) => sum + getCardUsed(c.id, transactions),
+    0
+  );
+
+  if (cashBalance < totalCardUsed * 0.2) {
+    warnings.push("Cash buffer looks thin relative to card balances");
+  }
+
+  return warnings;
+}
+Step 10: Build the dashboard first
+
+Create src/app/page.tsx
+
+"use client";
+
+import Link from "next/link";
+import { useAppData } from "@/hooks/useAppData";
+import {
+  getBestCard,
+  getWarnings,
+  getSafeSpendRemaining,
+  getCardUsed,
+  getDaysUntilDue,
+} from "@/lib/calculations";
+
+export default function HomePage() {
+  const { ready, cards, transactions } = useAppData();
+
+  if (!ready) return <div className="p-6">Loading...</div>;
+
+  const bestCard = getBestCard(cards, transactions);
+  const warnings = getWarnings(cards, transactions);
+
+  const totalSafeRemaining = cards.reduce(
+    (sum, card) => sum + getSafeSpendRemaining(card, transactions),
+    0
+  );
+
+  return (
+    <main className="p-6 space-y-6">
+      <div className="flex gap-3">
+        <Link className="underline" href="/cards">Cards</Link>
+        <Link className="underline" href="/transactions">Transactions</Link>
+        <Link className="underline" href="/add">Add Entry</Link>
+      </div>
+
+      <section className="rounded-2xl border p-5">
+        <h1 className="text-2xl font-semibold mb-2">Best Card Today</h1>
+        {bestCard ? (
+          <>
+            <div className="text-xl">{bestCard.name}</div>
+            <div className="text-sm text-gray-600">
+              Safe spend remaining: {getSafeSpendRemaining(bestCard, transactions).toFixed(0)}
+            </div>
+          </>
+        ) : (
+          <div>No cards added yet.</div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border p-5">
+        <h2 className="text-xl font-semibold mb-2">Upcoming Payments</h2>
+        <div className="space-y-2">
+          {cards.map((card) => (
+            <div key={card.id} className="flex justify-between">
+              <span>{card.name}</span>
+              <span>
+                Used: {getCardUsed(card.id, transactions).toFixed(0)} | Due in{" "}
+                {getDaysUntilDue(card.dueDay)} day(s)
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border p-5">
+        <h2 className="text-xl font-semibold mb-2">Warnings</h2>
+        {warnings.length ? (
+          <ul className="list-disc pl-5">
+            {warnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        ) : (
+          <div>No warnings.</div>
+        )}
+      </section>
+
+      <section className="rounded-2xl border p-5">
+        <h2 className="text-xl font-semibold mb-2">Total Safe Spend Remaining</h2>
+        <div className="text-2xl font-bold">{totalSafeRemaining.toFixed(0)}</div>
+      </section>
+    </main>
+  );
+}
+Step 11: Build the cards page
+
+Create src/app/cards/page.tsx
+
+"use client";
+
+import Link from "next/link";
+import { useAppData } from "@/hooks/useAppData";
+import {
+  getCardUsed,
+  getUtilization,
+  getSafeSpendRemaining,
+} from "@/lib/calculations";
+
+export default function CardsPage() {
+  const { ready, cards, transactions } = useAppData();
+
+  if (!ready) return <div className="p-6">Loading...</div>;
+
+  return (
+    <main className="p-6 space-y-6">
+      <Link className="underline" href="/">Back</Link>
+      <h1 className="text-2xl font-semibold">Cards</h1>
+
+      <div className="space-y-4">
+        {cards.map((card) => {
+          const used = getCardUsed(card.id, transactions);
+          const util = getUtilization(card, transactions);
+          const safe = getSafeSpendRemaining(card, transactions);
+
+          return (
+            <div key={card.id} className="rounded-2xl border p-4">
+              <div className="font-semibold">{card.name}</div>
+              <div>Limit: {card.limit}</div>
+              <div>Statement day: {card.statementDay}</div>
+              <div>Due day: {card.dueDay}</div>
+              <div>Used: {used.toFixed(0)}</div>
+              <div>Utilization: {(util * 100).toFixed(1)}%</div>
+              <div>Safe remaining: {safe.toFixed(0)}</div>
+            </div>
+          );
+        })}
+      </div>
+    </main>
+  );
+}
+Step 12: Build the transactions page
+
+Create src/app/transactions/page.tsx
+
+"use client";
+
+import Link from "next/link";
+import { useAppData } from "@/hooks/useAppData";
+
+export default function TransactionsPage() {
+  const { ready, transactions, cards } = useAppData();
+
+  if (!ready) return <div className="p-6">Loading...</div>;
+
+  const getCardName = (cardId?: string) =>
+    cards.find((c) => c.id === cardId)?.name ?? "-";
+
+  return (
+    <main className="p-6 space-y-6">
+      <Link className="underline" href="/">Back</Link>
+      <h1 className="text-2xl font-semibold">Transactions</h1>
+
+      <div className="space-y-2">
+        {transactions.map((t) => (
+          <div key={t.id} className="rounded-xl border p-3">
+            <div>{t.type.toUpperCase()}</div>
+            <div>Amount: {t.amount}</div>
+            <div>Date: {t.date}</div>
+            <div>Card: {getCardName(t.cardId)}</div>
+            <div>Note: {t.note || "-"}</div>
+          </div>
+        ))}
+      </div>
+    </main>
+  );
+}
+Step 13: Build the add entry page
+
+Create src/app/add/page.tsx
+
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { useAppData } from "@/hooks/useAppData";
+import { Card, TransactionType } from "@/lib/types";
+
+function uid() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+export default function AddPage() {
+  const { ready, cards, addCard, addTransaction } = useAppData();
+
+  const [mode, setMode] = useState<"card" | "transaction">("transaction");
+
+  const [cardName, setCardName] = useState("");
+  const [bank, setBank] = useState("");
+  const [limit, setLimit] = useState("");
+  const [statementDay, setStatementDay] = useState("");
+  const [dueDay, setDueDay] = useState("");
+
+  const [type, setType] = useState<TransactionType>("expense");
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [cardId, setCardId] = useState("");
+  const [note, setNote] = useState("");
+
+  if (!ready) return <div className="p-6">Loading...</div>;
+
+  const submitCard = () => {
+    addCard({
+      id: uid(),
+      name: cardName,
+      bank,
+      limit: Number(limit),
+      statementDay: Number(statementDay),
+      dueDay: Number(dueDay),
+    });
+
+    setCardName("");
+    setBank("");
+    setLimit("");
+    setStatementDay("");
+    setDueDay("");
+  };
+
+  const submitTransaction = () => {
+    addTransaction({
+      id: uid(),
+      type,
+      amount: Number(amount),
+      date,
+      cardId: type === "income" ? undefined : cardId || undefined,
+      note,
+    });
+
+    setAmount("");
+    setNote("");
+  };
+
+  return (
+    <main className="p-6 space-y-6">
+      <Link className="underline" href="/">Back</Link>
+      <h1 className="text-2xl font-semibold">Add Entry</h1>
+
+      <div className="flex gap-3">
+        <button className="border rounded px-3 py-2" onClick={() => setMode("transaction")}>
+          Transaction
+        </button>
+        <button className="border rounded px-3 py-2" onClick={() => setMode("card")}>
+          Card
+        </button>
+      </div>
+
+      {mode === "card" ? (
+        <div className="space-y-3 rounded-2xl border p-4">
+          <input className="border p-2 w-full" placeholder="Card name" value={cardName} onChange={(e) => setCardName(e.target.value)} />
+          <input className="border p-2 w-full" placeholder="Bank" value={bank} onChange={(e) => setBank(e.target.value)} />
+          <input className="border p-2 w-full" placeholder="Limit" type="number" value={limit} onChange={(e) => setLimit(e.target.value)} />
+          <input className="border p-2 w-full" placeholder="Statement day" type="number" value={statementDay} onChange={(e) => setStatementDay(e.target.value)} />
+          <input className="border p-2 w-full" placeholder="Due day" type="number" value={dueDay} onChange={(e) => setDueDay(e.target.value)} />
+          <button className="border rounded px-3 py-2" onClick={submitCard}>Save card</button>
+        </div>
+      ) : (
+        <div className="space-y-3 rounded-2xl border p-4">
+          <select className="border p-2 w-full" value={type} onChange={(e) => setType(e.target.value as TransactionType)}>
+            <option value="expense">Expense</option>
+            <option value="payment">Payment</option>
+            <option value="income">Income</option>
+          </select>
+
+          <input className="border p-2 w-full" placeholder="Amount" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input className="border p-2 w-full" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+
+          {type !== "income" && (
+            <select className="border p-2 w-full" value={cardId} onChange={(e) => setCardId(e.target.value)}>
+              <option value="">Select card</option>
+              {cards.map((card: Card) => (
+                <option key={card.id} value={card.id}>
+                  {card.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <input className="border p-2 w-full" placeholder="Note" value={note} onChange={(e) => setNote(e.target.value)} />
+          <button className="border rounded px-3 py-2" onClick={submitTransaction}>Save transaction</button>
+        </div>
+      )}
+    </main>
+  );
+}
+Step 14: Test with sample data
+
+Add 3 cards like:
+
+Card A: limit 500000, statement 1, due 25
+Card B: limit 300000, statement 11, due 5
+Card C: limit 400000, statement 21, due 15
+
+Then add:
+
+income 200000
+expense 35000 on Card A
+expense 12000 on Card B
+payment 10000 on Card A
+
+Check:
+
+dashboard shows best card
+cards show used and utilization
+warnings appear near due dates
+Step 15: Polish the MVP
+
+After the core works, add these small upgrades:
+
+Validation
+amount must be positive
+statement/due day must be valid
+expense/payment must have a card
+Empty states
+“No cards yet”
+“No transactions yet”
+Better formatting
+currency formatting
+percent formatting
+warning badges
+Seed demo data button
+
+Very useful for testing

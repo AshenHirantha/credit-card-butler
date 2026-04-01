@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "CCOS - Credit Card Manager"
+version = "1.0.0"
+id = "artifacts/ccos"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25653
+
+[services.development]
+run = "pnpm --filter @workspace/ccos run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ccos", "run", "build" ]
+publicDir = "artifacts/ccos/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25653"
+BASE_PATH = "/"

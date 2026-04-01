@@ -1,22 +1,26 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: CCOS - Credit Card Operating System API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: cards
+    description: Credit card management
+  - name: transactions
+    description: Transaction management
+  - name: dashboard
+    description: Dashboard computed data
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +28,190 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /cards:
+    get:
+      operationId: listCards
+      tags: [cards]
+      summary: List all cards
+      responses:
+        "200":
+          description: List of cards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Card"
+    post:
+      operationId: createCard
+      tags: [cards]
+      summary: Create a card
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCardBody"
+      responses:
+        "201":
+          description: Created card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+
+  /cards/{id}:
+    get:
+      operationId: getCard
+      tags: [cards]
+      summary: Get a card by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateCard
+      tags: [cards]
+      summary: Update a card
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCardBody"
+      responses:
+        "200":
+          description: Updated card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Card"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteCard
+      tags: [cards]
+      summary: Delete a card
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /transactions:
+    get:
+      operationId: listTransactions
+      tags: [transactions]
+      summary: List transactions
+      parameters:
+        - name: cardId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [expense, payment, income]
+      responses:
+        "200":
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+    post:
+      operationId: createTransaction
+      tags: [transactions]
+      summary: Create a transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransactionBody"
+      responses:
+        "201":
+          description: Created transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+
+  /transactions/{id}:
+    delete:
+      operationId: deleteTransaction
+      tags: [transactions]
+      summary: Delete a transaction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Get dashboard summary
+      responses:
+        "200":
+          description: Dashboard computed data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +222,222 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Card:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        bank:
+          type: string
+          nullable: true
+        limit:
+          type: number
+        statementDay:
+          type: integer
+          minimum: 1
+          maximum: 31
+        dueDay:
+          type: integer
+          minimum: 1
+          maximum: 31
+        color:
+          type: string
+          nullable: true
+        used:
+          type: number
+        utilization:
+          type: number
+        safeSpendRemaining:
+          type: number
+        daysUntilDue:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - limit
+        - statementDay
+        - dueDay
+        - used
+        - utilization
+        - safeSpendRemaining
+        - daysUntilDue
+        - createdAt
+
+    CreateCardBody:
+      type: object
+      properties:
+        name:
+          type: string
+        bank:
+          type: string
+          nullable: true
+        limit:
+          type: number
+        statementDay:
+          type: integer
+          minimum: 1
+          maximum: 31
+        dueDay:
+          type: integer
+          minimum: 1
+          maximum: 31
+        color:
+          type: string
+          nullable: true
+      required:
+        - name
+        - limit
+        - statementDay
+        - dueDay
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [expense, payment, income]
+        amount:
+          type: number
+        date:
+          type: string
+        cardId:
+          type: integer
+          nullable: true
+        note:
+          type: string
+          nullable: true
+        cardName:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - type
+        - amount
+        - date
+        - createdAt
+
+    CreateTransactionBody:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [expense, payment, income]
+        amount:
+          type: number
+        date:
+          type: string
+        cardId:
+          type: integer
+          nullable: true
+        note:
+          type: string
+          nullable: true
+      required:
+        - type
+        - amount
+        - date
+
+    CardSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        bank:
+          type: string
+          nullable: true
+        color:
+          type: string
+          nullable: true
+        limit:
+          type: number
+        used:
+          type: number
+        utilization:
+          type: number
+        safeSpendRemaining:
+          type: number
+        daysUntilDue:
+          type: integer
+        score:
+          type: number
+      required:
+        - id
+        - name
+        - limit
+        - used
+        - utilization
+        - safeSpendRemaining
+        - daysUntilDue
+        - score
+
+    Warning:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [utilization, due_soon, cash_buffer]
+        message:
+          type: string
+        cardId:
+          type: integer
+          nullable: true
+        severity:
+          type: string
+          enum: [info, warning, critical]
+      required:
+        - type
+        - message
+        - severity
+
+    DashboardSummary:
+      type: object
+      properties:
+        bestCard:
+          $ref: "#/components/schemas/CardSummary"
+          nullable: true
+        cards:
+          type: array
+          items:
+            $ref: "#/components/schemas/CardSummary"
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/Warning"
+        totalSafeSpendRemaining:
+          type: number
+        totalUsed:
+          type: number
+        totalLimit:
+          type: number
+        cashBalance:
+          type: number
+        recentTransactions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Transaction"
+      required:
+        - cards
+        - warnings
+        - totalSafeSpendRemaining
+        - totalUsed
+        - totalLimit
+        - cashBalance
+        - recentTransactions
