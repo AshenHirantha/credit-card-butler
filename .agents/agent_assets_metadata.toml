@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "Ke8WnPCD19kv3rVSxALBa"
+uri = "file://DEVELOPER_GUIDE.md"
+type = "text"
+title = "CCOS Developer Guide"
