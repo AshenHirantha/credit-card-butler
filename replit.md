@@ -9,10 +9,13 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 A personal finance web app that helps users make smart credit card decisions daily.
 
 ### Features
+- **Authentication**: Multi-user login via Clerk (email, Google OAuth). Each user has isolated data.
+- **Landing Page**: Public marketing page at `/` with sign-in/sign-up CTAs
 - **Dashboard**: Best card recommendation (scored by cycle position, utilization, due date), warnings, spending stats
 - **Cards**: Manage credit cards with limit, utilization, safe spend remaining, statement/due dates
 - **Transactions**: Log expenses, payments, income. Filter by type. All linked to cards.
 - **Add Entry**: Quick form to add any transaction type
+- **AI Statement Import**: Upload photo/PDF of statement, Claude AI extracts transactions for review before bulk import
 
 ### Core Business Rules
 - Safe spend = 40% of limit
@@ -20,10 +23,12 @@ A personal finance web app that helps users make smart credit card decisions dai
 - Warnings trigger at: utilization > 40%, due within 7 days, thin cash buffer
 
 ### Architecture
-- Frontend: `artifacts/ccos/` — React + Vite + wouter + shadcn/ui
-- Backend: `artifacts/api-server/` — Express 5 + PostgreSQL + Drizzle ORM
+- Frontend: `artifacts/ccos/` — React + Vite + wouter + shadcn/ui + Clerk React
+- Backend: `artifacts/api-server/` — Express 5 + PostgreSQL + Drizzle ORM + Clerk Express
+- Auth: Clerk (multi-user), `requireAuth` middleware in `artifacts/api-server/src/middlewares/requireAuth.ts`
 - Calculation logic: `artifacts/api-server/src/lib/calculations.ts`
-- DB schema: `lib/db/src/schema/cards.ts`, `lib/db/src/schema/transactions.ts`
+- DB schema: `lib/db/src/schema/cards.ts`, `lib/db/src/schema/transactions.ts` (both have `userId` column)
+- All API routes scoped by `userId` from Clerk session
 
 ## Stack
 

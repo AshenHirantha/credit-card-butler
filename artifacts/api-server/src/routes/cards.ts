@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, cardsTable, transactionsTable } from "@workspace/db";
 import {
   CreateCardBody,
@@ -9,12 +9,24 @@ import {
   DeleteCardParams,
 } from "@workspace/api-zod";
 import { toCardSummary } from "../lib/calculations";
+import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
 
-router.get("/cards", async (_req, res): Promise<void> => {
-  const cards = await db.select().from(cardsTable).orderBy(cardsTable.createdAt);
-  const transactions = await db.select().from(transactionsTable);
+router.use(requireAuth);
+
+router.get("/cards", async (req, res): Promise<void> => {
+  const userId = req.userId;
+  const cards = await db
+    .select()
+    .from(cardsTable)
+    .where(eq(cardsTable.userId, userId))
+    .orderBy(cardsTable.createdAt);
+
+  const transactions = await db
+    .select()
+    .from(transactionsTable)
+    .where(eq(transactionsTable.userId, userId));
 
   const result = cards.map((card) => ({
     ...card,
@@ -27,22 +39,30 @@ router.get("/cards", async (_req, res): Promise<void> => {
 });
 
 router.post("/cards", async (req, res): Promise<void> => {
+  const userId = req.userId;
   const parsed = CreateCardBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const [card] = await db.insert(cardsTable).values({
-    name: parsed.data.name,
-    bank: parsed.data.bank ?? null,
-    limit: parsed.data.limit,
-    statementDay: parsed.data.statementDay,
-    dueDay: parsed.data.dueDay,
-    color: parsed.data.color ?? null,
-  }).returning();
+  const [card] = await db
+    .insert(cardsTable)
+    .values({
+      userId,
+      name: parsed.data.name,
+      bank: parsed.data.bank ?? null,
+      limit: parsed.data.limit,
+      statementDay: parsed.data.statementDay,
+      dueDay: parsed.data.dueDay,
+      color: parsed.data.color ?? null,
+    })
+    .returning();
 
-  const transactions = await db.select().from(transactionsTable).where(eq(transactionsTable.cardId, card.id));
+  const transactions = await db
+    .select()
+    .from(transactionsTable)
+    .where(and(eq(transactionsTable.cardId, card.id), eq(transactionsTable.userId, userId)));
   const summary = toCardSummary(card, transactions);
 
   res.status(201).json({
@@ -54,19 +74,26 @@ router.post("/cards", async (req, res): Promise<void> => {
 });
 
 router.get("/cards/:id", async (req, res): Promise<void> => {
+  const userId = req.userId;
   const params = GetCardParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
 
-  const [card] = await db.select().from(cardsTable).where(eq(cardsTable.id, params.data.id));
+  const [card] = await db
+    .select()
+    .from(cardsTable)
+    .where(and(eq(cardsTable.id, params.data.id), eq(cardsTable.userId, userId)));
   if (!card) {
     res.status(404).json({ error: "Card not found" });
     return;
   }
 
-  const transactions = await db.select().from(transactionsTable).where(eq(transactionsTable.cardId, card.id));
+  const transactions = await db
+    .select()
+    .from(transactionsTable)
+    .where(eq(transactionsTable.cardId, card.id));
   const summary = toCardSummary(card, transactions);
 
   res.json({
@@ -78,6 +105,7 @@ router.get("/cards/:id", async (req, res): Promise<void> => {
 });
 
 router.put("/cards/:id", async (req, res): Promise<void> => {
+  const userId = req.userId;
   const params = UpdateCardParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -90,21 +118,28 @@ router.put("/cards/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const [card] = await db.update(cardsTable).set({
-    name: parsed.data.name,
-    bank: parsed.data.bank ?? null,
-    limit: parsed.data.limit,
-    statementDay: parsed.data.statementDay,
-    dueDay: parsed.data.dueDay,
-    color: parsed.data.color ?? null,
-  }).where(eq(cardsTable.id, params.data.id)).returning();
+  const [card] = await db
+    .update(cardsTable)
+    .set({
+      name: parsed.data.name,
+      bank: parsed.data.bank ?? null,
+      limit: parsed.data.limit,
+      statementDay: parsed.data.statementDay,
+      dueDay: parsed.data.dueDay,
+      color: parsed.data.color ?? null,
+    })
+    .where(and(eq(cardsTable.id, params.data.id), eq(cardsTable.userId, userId)))
+    .returning();
 
   if (!card) {
     res.status(404).json({ error: "Card not found" });
     return;
   }
 
-  const transactions = await db.select().from(transactionsTable).where(eq(transactionsTable.cardId, card.id));
+  const transactions = await db
+    .select()
+    .from(transactionsTable)
+    .where(eq(transactionsTable.cardId, card.id));
   const summary = toCardSummary(card, transactions);
 
   res.json({
@@ -116,13 +151,17 @@ router.put("/cards/:id", async (req, res): Promise<void> => {
 });
 
 router.delete("/cards/:id", async (req, res): Promise<void> => {
+  const userId = req.userId;
   const params = DeleteCardParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
     return;
   }
 
-  const [card] = await db.delete(cardsTable).where(eq(cardsTable.id, params.data.id)).returning();
+  const [card] = await db
+    .delete(cardsTable)
+    .where(and(eq(cardsTable.id, params.data.id), eq(cardsTable.userId, userId)))
+    .returning();
   if (!card) {
     res.status(404).json({ error: "Card not found" });
     return;
