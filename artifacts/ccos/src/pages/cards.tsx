@@ -425,31 +425,38 @@ export default function CardsPage() {
                 </div>
               </CardHeader>
 
-              <CardContent className="pt-6 flex-1 flex flex-col gap-6 relative z-10">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Safe Spend</p>
-                    <p className="text-2xl font-bold font-mono text-primary tracking-tight">
-                      {formatCurrency(card.safeSpendRemaining)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Limit</p>
-                    <p className="text-xl font-semibold font-mono tracking-tight">
-                      {formatCurrency(card.limit)}
-                    </p>
-                  </div>
+              <CardContent className="pt-5 flex-1 flex flex-col gap-5 relative z-10">
+                {/* Safe spend — primary metric, full width */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                    Safe Spend Remaining
+                  </p>
+                  <p className="text-3xl font-bold font-mono text-primary leading-none">
+                    {formatCurrency(card.safeSpendRemaining)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    of {formatCurrency(card.limit)} limit
+                  </p>
                 </div>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
+                {/* Utilization bar */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-sm">
                     <span className="text-muted-foreground">
                       Used:{" "}
-                      <span className="font-medium text-foreground">
+                      <span className="font-medium text-foreground font-mono">
                         {formatCurrency(card.used)}
                       </span>
                     </span>
-                    <span className="font-medium">
+                    <span
+                      className={`font-semibold text-xs px-2 py-0.5 rounded-full ${
+                        card.utilization > 0.4
+                          ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                          : card.utilization >= 0.3
+                          ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                          : "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                      }`}
+                    >
                       {Math.round(card.utilization * 100)}%
                     </span>
                   </div>
