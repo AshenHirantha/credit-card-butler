@@ -30,7 +30,11 @@ app.use(
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-app.use(cors({ credentials: true, origin: true }));
+const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(",").map(s => s.trim()).filter(Boolean) : ["https://localhost:5173", "https://localhost:3000"];
+app.use(cors({ credentials: true, origin: (origin, cb) => {
+  if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+  else cb(new Error("Not allowed by CORS"));
+} }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
