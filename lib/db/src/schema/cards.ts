@@ -7,7 +7,7 @@ export const cardsTable = pgTable("cards", {
   userId: text("user_id"),
   name: text("name").notNull(),
   bank: text("bank"),
-  limit: real("limit").notNull(),
+  limit: text("limit").notNull(),
   statementDay: integer("statement_day").notNull(),
   dueDay: integer("due_day").notNull(),
   color: text("color"),

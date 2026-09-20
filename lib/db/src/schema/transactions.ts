@@ -7,7 +7,7 @@ export const transactionsTable = pgTable("transactions", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   userId: text("user_id"),
   type: text("type", { enum: ["expense", "payment", "income"] }).notNull(),
-  amount: real("amount").notNull(),
+  amount: text("amount").notNull(),
   date: text("date").notNull(),
   cardId: integer("card_id").references(() => cardsTable.id, { onDelete: "cascade" }),
   note: text("note"),

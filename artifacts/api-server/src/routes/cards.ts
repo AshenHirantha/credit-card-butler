@@ -10,6 +10,7 @@ import {
 } from "@workspace/api-zod";
 import { toCardSummary } from "../lib/calculations";
 import { requireAuth } from "../middlewares/requireAuth";
+import { encrypt, decrypt, encryptNumber, decryptNumber } from "../../lib/db/src/encryption";
 
 const router: IRouter = Router();
 
@@ -30,9 +31,11 @@ router.get("/cards", async (req, res): Promise<void> => {
 
   const result = cards.map((card) => ({
     ...card,
-    bank: card.bank ?? null,
-    color: card.color ?? null,
-    ...toCardSummary(card, transactions),
+    name: decrypt(card.name),
+    bank: card.bank ? decrypt(card.bank) : null,
+    limit: decryptNumber(card.limit),
+    color: card.color ? decrypt(card.color) : null,
+    ...toCardSummary({ ...card, name: decrypt(card.name), bank: card.bank ? decrypt(card.bank) : null, limit: decryptNumber(card.limit), color: card.color ? decrypt(card.color) : null }, transactions),
   }));
 
   res.json(result);
@@ -50,12 +53,12 @@ router.post("/cards", async (req, res): Promise<void> => {
     .insert(cardsTable)
     .values({
       userId,
-      name: parsed.data.name,
-      bank: parsed.data.bank ?? null,
-      limit: parsed.data.limit,
+      name: encrypt(parsed.data.name),
+      bank: parsed.data.bank ? encrypt(parsed.data.bank) : null,
+      limit: encryptNumber(parsed.data.limit),
       statementDay: parsed.data.statementDay,
       dueDay: parsed.data.dueDay,
-      color: parsed.data.color ?? null,
+      color: parsed.data.color ? encrypt(parsed.data.color) : null,
     })
     .returning();
 
