@@ -10,7 +10,7 @@ import {
 } from "@workspace/api-zod";
 import { toCardSummary } from "../lib/calculations";
 import { requireAuth } from "../middlewares/requireAuth";
-import { encrypt, decrypt, encryptNumber, decryptNumber } from "../../lib/db/src/encryption";
+import { encrypt, decrypt, encryptNumber, decryptNumber } from "@workspace/db";
 
 const router: IRouter = Router();
 
