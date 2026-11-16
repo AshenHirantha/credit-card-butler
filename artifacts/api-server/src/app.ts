@@ -1,6 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
-import pinoHttp from "pino-http";
+import { pinoHttp } from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
@@ -38,7 +38,11 @@ app.use(cors({ credentials: true, origin: (origin, cb) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(clerkMiddleware());
+app.use(
+  clerkMiddleware({
+    publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  }),
+);
 
 app.use("/api", router);
 
